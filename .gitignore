@@ -1,0 +1,41 @@
+# Documentation (except README.md)
+*.md
+!README.md
+
+# PowerShell Module Build Artifacts
+*.nupkg
+*.zip
+
+# Test Results
+TestResults/
+*.xml
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.suo
+*.user
+*.sln.docstates
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs and Output
+*.log
+*.csv
+CredentialReport_*.csv
+
+# Sensitive Files
+*.pfx
+*.cer
+*.pem
+*.key
+credentials.json
+secrets.json
+.env
