@@ -3,7 +3,7 @@
     RootModule        = 'EntraAppCredentials.psm1'
 
     # Version number of this module
-    ModuleVersion     = '0.1.0'
+    ModuleVersion     = '0.1.1'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -64,7 +64,7 @@
             # ProjectUri = ''
 
             # ReleaseNotes of this module
-            ReleaseNotes = 'Initial release - Query and report on expiring application credentials.'
+            ReleaseNotes = 'v0.1.1 - Reorganized module directory structure and updated documentation.'
 
             # Prerelease string of this module
             # Prerelease = ''

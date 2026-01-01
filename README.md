@@ -6,8 +6,6 @@ PowerShell modules for managing and reporting on Entra ID (Azure AD) application
 
 Query and report on expiring credentials (secrets and certificates) for Entra ID applications and service principals.
 
-**Location:** `ApplicationExpiration/EntraAppCredentials`
-
 ### Overview
 
 This module helps administrators identify and track credentials that are expiring or have already expired across:
@@ -227,23 +225,12 @@ Get-ExpiringAppCredential -ApplicationId $appIds -DaysUntilExpiration 90
 - Use `-IncludeOwners $false` for faster execution when owner data is not needed
 - Use `-ExcludeMicrosoft $true` for service principals to skip first-party Microsoft apps
 
-## Project Structure
-
-```
-EntraApplications/
-├── README.md                           # This file
-├── CLAUDE.md                           # Project configuration
-├── POWERSHELL_STYLE.md                 # Coding standards
-├── expiring-credentials-guide.md       # Design documentation
-└── ApplicationExpiration/
-    └── EntraAppCredentials/            # Credential expiration module
-        ├── EntraAppCredentials.psd1    # Module manifest
-        ├── EntraAppCredentials.psm1    # Module loader
-        ├── Public/                     # Exported functions
-        └── Private/                    # Internal helpers
-```
-
 ## Changelog
+
+### v0.1.1 (2026-01-01)
+
+- Reorganized module directory structure
+- Updated documentation
 
 ### v0.1.0 (2025-12-31)
 
