@@ -39,3 +39,4 @@ CredentialReport_*.csv
 credentials.json
 secrets.json
 .env
+.gitignore
