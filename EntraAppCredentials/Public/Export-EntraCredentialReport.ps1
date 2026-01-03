@@ -1,4 +1,4 @@
-function Export-CredentialReport {
+function Export-EntraCredentialReport {
     <#
     .SYNOPSIS
         Exports a combined credential expiration report to CSV.
@@ -9,8 +9,9 @@ function Export-CredentialReport {
         data as objects for further processing.
 
     .PARAMETER OutputPath
-        The file path for the CSV export.
-        If not specified, generates a file in the current directory with timestamp.
+        Base path for the CSV output. The function appends '_<timestamp>.csv' if a
+        directory is specified, or uses the exact path if a .csv file is specified.
+        If not specified, outputs to EntraCredentialReport_<timestamp>.csv in the current directory.
 
     .PARAMETER DaysUntilExpiration
         The number of days to look ahead for expiring credentials.
@@ -29,34 +30,43 @@ function Export-CredentialReport {
         Default is $true.
 
     .PARAMETER ExcludeMicrosoft
-        Exclude Microsoft first-party service principals.
-        Default is $false.
+        Exclude Microsoft first-party and Microsoft-managed service principals.
+        This includes apps owned by Microsoft's tenant as well as Microsoft-managed
+        apps registered in your tenant (e.g., P2P Server device RDP certificates).
 
-    .PARAMETER IncludeOwners
-        Include owner information in the report.
-        Default is $true.
+    .PARAMETER ExcludeManagedIdentity
+        Exclude Managed Identity service principals. Managed Identity credentials
+        are auto-rotated by Azure and typically don't require manual monitoring.
+
+    .PARAMETER ExcludeOwners
+        Exclude owner information from the report. Use for faster execution.
 
     .PARAMETER PassThru
         Return the credential objects in addition to exporting to CSV.
 
     .EXAMPLE
-        Export-CredentialReport
+        Export-EntraCredentialReport
 
-        Exports all expiring credentials to a timestamped CSV file.
-
-    .EXAMPLE
-        Export-CredentialReport -OutputPath 'C:\Reports\credentials.csv' -DaysUntilExpiration 90
-
-        Exports credentials expiring within 90 days to a specific file.
+        Exports all expiring credentials to a timestamped CSV file in the current directory.
 
     .EXAMPLE
-        Export-CredentialReport -IncludeServicePrincipals $false -PassThru
+        Export-EntraCredentialReport -OutputPath 'C:\Reports'
 
-        Exports only application credentials and returns the objects.
+        Exports to C:\Reports\EntraCredentialReport_<timestamp>.csv
 
     .EXAMPLE
-        $report = Export-CredentialReport -PassThru
-        $report | Where-Object { $_.Status -eq 'Expired' }
+        Export-EntraCredentialReport -OutputPath 'C:\Reports\credentials.csv' -DaysUntilExpiration 90
+
+        Exports credentials expiring within 90 days to the specific file.
+
+    .EXAMPLE
+        Export-EntraCredentialReport -ExcludeMicrosoft -ExcludeManagedIdentity -PassThru
+
+        Exports credentials excluding Microsoft and Managed Identity apps, returns the objects.
+
+    .EXAMPLE
+        $report = Export-EntraCredentialReport -PassThru
+        $report | Where-Object -FilterScript { $PSItem.Status -eq 'Expired' }
 
         Gets the report and filters for expired credentials.
 
@@ -87,23 +97,35 @@ function Export-CredentialReport {
         [Bool]$IncludeServicePrincipals = $true,
 
         [Parameter()]
-        [Bool]$ExcludeMicrosoft = $false,
+        [Switch]$ExcludeMicrosoft,
 
         [Parameter()]
-        [Bool]$IncludeOwners = $true,
+        [Switch]$ExcludeManagedIdentity,
+
+        [Parameter()]
+        [Switch]$ExcludeOwners,
 
         [Parameter()]
         [Switch]$PassThru
     )
 
     begin {
-        Write-Verbose -Message 'Starting Export-CredentialReport'
+        Write-Verbose -Message 'Starting Export-EntraCredentialReport'
 
-        # Generate output path if not specified
+        # Generate output path
+        $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
         if (-not $OutputPath) {
-            $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-            $OutputPath = Join-Path -Path (Get-Location) -ChildPath "CredentialReport_$timestamp.csv"
+            $OutputPath = Join-Path -Path (Get-Location) -ChildPath "EntraCredentialReport_$timestamp.csv"
         }
+        elseif (Test-Path -Path $OutputPath -PathType Container) {
+            # OutputPath is a directory - append filename
+            $OutputPath = Join-Path -Path $OutputPath -ChildPath "EntraCredentialReport_$timestamp.csv"
+        }
+        elseif (-not $OutputPath.EndsWith('.csv', [StringComparison]::OrdinalIgnoreCase)) {
+            # OutputPath is a base name - append timestamp and extension
+            $OutputPath = "${OutputPath}_$timestamp.csv"
+        }
+        # else: OutputPath is already a full .csv path, use as-is
 
         # Ensure directory exists
         $outputDir = Split-Path -Path $OutputPath -Parent
@@ -113,22 +135,37 @@ function Export-CredentialReport {
 
         # Initialize combined results using List for O(n) performance
         $allCredentials = New-Object -TypeName 'System.Collections.Generic.List[PSCustomObject]'
+
+        # Determine IncludeOwners value (inverse of ExcludeOwners)
+        $includeOwners = -not $ExcludeOwners
+
+        # Progress tracking
+        $parentProgressId = 0
+        $totalSteps = ([Int32]$IncludeApplications) + ([Int32]$IncludeServicePrincipals)
+        $currentStep = 0
     }
 
     process {
         try {
             # Get application credentials
             if ($IncludeApplications) {
+                $currentStep++
+                $parentPercent = [Math]::Round(($currentStep - 1) / $totalSteps * 100)
+                Write-Progress -Id $parentProgressId -Activity 'Exporting Credential Report' `
+                    -Status "[$currentStep/$totalSteps] Querying application credentials" `
+                    -PercentComplete $parentPercent
+
                 Write-Verbose -Message 'Querying application credentials...'
                 $appCredentials = Get-ExpiringAppCredential `
                     -DaysUntilExpiration $DaysUntilExpiration `
                     -IncludeExpired $IncludeExpired `
-                    -IncludeOwners $IncludeOwners
+                    -IncludeOwners $includeOwners `
+                    -ProgressParentId $parentProgressId
 
                 foreach ($cred in $appCredentials) {
                     # Normalize to common schema
                     $normalized = [PSCustomObject]@{
-                        DisplayName          = $cred.ApplicationName
+                        DisplayName          = $cred.DisplayName
                         ApplicationId        = $cred.ApplicationId
                         ObjectId             = $cred.ObjectId
                         ObjectType           = $cred.ObjectType
@@ -155,17 +192,25 @@ function Export-CredentialReport {
 
             # Get service principal credentials
             if ($IncludeServicePrincipals) {
+                $currentStep++
+                $parentPercent = [Math]::Round(($currentStep - 1) / $totalSteps * 100)
+                Write-Progress -Id $parentProgressId -Activity 'Exporting Credential Report' `
+                    -Status "[$currentStep/$totalSteps] Querying service principal credentials" `
+                    -PercentComplete $parentPercent
+
                 Write-Verbose -Message 'Querying service principal credentials...'
                 $spCredentials = Get-ExpiringSpCredential `
                     -DaysUntilExpiration $DaysUntilExpiration `
                     -IncludeExpired $IncludeExpired `
-                    -IncludeOwners $IncludeOwners `
-                    -ExcludeMicrosoft $ExcludeMicrosoft
+                    -IncludeOwners $includeOwners `
+                    -ExcludeMicrosoft:$ExcludeMicrosoft `
+                    -ExcludeManagedIdentity:$ExcludeManagedIdentity `
+                    -ProgressParentId $parentProgressId
 
                 foreach ($cred in $spCredentials) {
                     # Normalize to common schema
                     $normalized = [PSCustomObject]@{
-                        DisplayName          = $cred.ServicePrincipalName
+                        DisplayName          = $cred.DisplayName
                         ApplicationId        = $cred.ApplicationId
                         ObjectId             = $cred.ObjectId
                         ObjectType           = $cred.ObjectType
@@ -189,6 +234,9 @@ function Export-CredentialReport {
                 }
                 Write-Verbose -Message "Added $(@($spCredentials).Count) service principal credential(s)"
             }
+
+            # Complete parent progress
+            Write-Progress -Id $parentProgressId -Activity 'Exporting Credential Report' -Completed
 
             # Sort by days remaining (expired first, then soonest to expire)
             $sortedCredentials = $allCredentials | Sort-Object -Property @{
@@ -220,6 +268,7 @@ function Export-CredentialReport {
             }
         }
         catch {
+            Write-Progress -Id $parentProgressId -Activity 'Exporting Credential Report' -Completed
             Write-Error -Message "Failed to generate credential report: $PSItem"
             throw
         }

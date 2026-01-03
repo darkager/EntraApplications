@@ -30,6 +30,7 @@ Desktop.ini
 *.log
 *.csv
 CredentialReport_*.csv
+_data/
 
 # Sensitive Files
 *.pfx

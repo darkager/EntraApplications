@@ -26,8 +26,13 @@ function Get-ExpiringSpCredential {
         If not specified, all service principals are queried.
 
     .PARAMETER ExcludeMicrosoft
-        Exclude Microsoft first-party service principals.
-        Default is $false.
+        Exclude Microsoft first-party and Microsoft-managed service principals.
+        This includes apps owned by Microsoft's tenant (f8cdef31-a31e-4b4a-93e4-5f571e91255a)
+        as well as Microsoft-managed apps registered in your tenant (e.g., P2P Server).
+
+    .PARAMETER ExcludeManagedIdentity
+        Exclude Managed Identity service principals. Managed Identity credentials
+        are auto-rotated by Azure and typically don't require manual monitoring.
 
     .EXAMPLE
         Get-ExpiringSpCredential
@@ -40,13 +45,19 @@ function Get-ExpiringSpCredential {
         Gets service principals with credentials expiring in the next 90 days, excluding already expired.
 
     .EXAMPLE
-        Get-ExpiringSpCredential -ExcludeMicrosoft $true
+        Get-ExpiringSpCredential -ExcludeMicrosoft
 
-        Gets expiring credentials excluding Microsoft first-party applications.
+        Gets expiring credentials excluding Microsoft first-party and Microsoft-managed applications
+        (including P2P Server device RDP certificates).
+
+    .EXAMPLE
+        Get-ExpiringSpCredential -ExcludeManagedIdentity
+
+        Gets expiring credentials excluding Managed Identity service principals.
 
     .OUTPUTS
         PSCustomObject with properties:
-        - ServicePrincipalName, ApplicationId, ObjectId, ObjectType
+        - DisplayName, ApplicationId, ObjectId, ObjectType
         - CredentialType, CredentialName, KeyId
         - StartDate, EndDate, DaysRemaining, Status
         - CertificateType, CertificateUsage (for certificates)
@@ -72,7 +83,13 @@ function Get-ExpiringSpCredential {
         [String[]]$ServicePrincipalId,
 
         [Parameter()]
-        [Bool]$ExcludeMicrosoft = $false
+        [Switch]$ExcludeMicrosoft,
+
+        [Parameter()]
+        [Switch]$ExcludeManagedIdentity,
+
+        [Parameter(DontShow)]
+        [Int32]$ProgressParentId = -1
     )
 
     begin {
@@ -84,6 +101,12 @@ function Get-ExpiringSpCredential {
 
         # Microsoft tenant ID for filtering first-party apps
         $microsoftTenantId = 'f8cdef31-a31e-4b4a-93e4-5f571e91255a'
+
+        # Load Microsoft-managed app definitions once for performance
+        $microsoftAppDefinitions = $null
+        if ($ExcludeMicrosoft) {
+            $microsoftAppDefinitions = Get-MicrosoftAppDefinition
+        }
     }
 
     process {
@@ -105,14 +128,48 @@ function Get-ExpiringSpCredential {
 
             $processedCount = 0
             $skippedMicrosoft = 0
+            $skippedMicrosoftManaged = 0
+            $skippedManagedIdentity = 0
+            $progressId = if ($ProgressParentId -ge 0) { $ProgressParentId + 1 } else { 1 }
 
             foreach ($sp in $servicePrincipals) {
                 $processedCount++
 
-                # Skip Microsoft first-party apps if requested
+                # Show progress
+                $percentComplete = [Math]::Round(($processedCount / $spCount) * 100)
+                $progressParams = @{
+                    Id              = $progressId
+                    Activity        = 'Processing Service Principals'
+                    Status          = "Service Principal $processedCount of $spCount"
+                    CurrentOperation = $sp.DisplayName
+                    PercentComplete = $percentComplete
+                }
+                if ($ProgressParentId -ge 0) {
+                    $progressParams['ParentId'] = $ProgressParentId
+                }
+                Write-Progress @progressParams
+
+                # Skip Microsoft first-party apps if requested (by tenant ownership)
                 if ($ExcludeMicrosoft -and $sp.AppOwnerOrganizationId -eq $microsoftTenantId) {
                     $skippedMicrosoft++
-                    Write-Verbose -Message "Skipping Microsoft app: $($sp.DisplayName)"
+                    Write-Verbose -Message "Skipping Microsoft first-party app: $($sp.DisplayName)"
+                    continue
+                }
+
+                # Skip Microsoft-managed apps registered in customer tenant (e.g., P2P Server)
+                if ($ExcludeMicrosoft) {
+                    $msCheck = Test-EntraAppMicrosoftManaged -ServicePrincipal $sp -Definitions $microsoftAppDefinitions
+                    if ($msCheck.IsMicrosoftManaged) {
+                        $skippedMicrosoftManaged++
+                        Write-Verbose -Message "Skipping Microsoft-managed app ($($msCheck.MatchedDefinition)): $($sp.DisplayName)"
+                        continue
+                    }
+                }
+
+                # Skip Managed Identity service principals if requested
+                if ($ExcludeManagedIdentity -and $sp.ServicePrincipalType -eq 'ManagedIdentity') {
+                    $skippedManagedIdentity++
+                    Write-Verbose -Message "Skipping Managed Identity: $($sp.DisplayName)"
                     continue
                 }
 
@@ -136,8 +193,23 @@ function Get-ExpiringSpCredential {
                     }
                 }
 
+                # Build a set of KeyIds from KeyCredentials to filter out duplicate PasswordCredentials
+                # When SAML signing certs are created, both a KeyCredential and PasswordCredential are
+                # created with the same KeyId. The PasswordCredential is just the private key password.
+                $keyCredentialIds = New-Object -TypeName 'System.Collections.Generic.HashSet[String]'
+                foreach ($cert in $sp.KeyCredentials) {
+                    [void]$keyCredentialIds.Add($cert.KeyId.ToString())
+                }
+
                 # Process password credentials (secrets)
                 foreach ($secret in $sp.PasswordCredentials) {
+                    # Skip password credentials that share a KeyId with a key credential
+                    # These are private key passwords for certificates, not standalone secrets
+                    if ($keyCredentialIds.Contains($secret.KeyId.ToString())) {
+                        Write-Verbose -Message "Skipping password credential (certificate private key): $($secret.DisplayName)"
+                        continue
+                    }
+
                     $credStatus = Get-CredentialStatus -EndDateTime $secret.EndDateTime -ReferenceDate $now
 
                     # Filter based on parameters
@@ -151,7 +223,7 @@ function Get-ExpiringSpCredential {
 
                     if ($includeThis) {
                         $credentialResult = [PSCustomObject]@{
-                            ServicePrincipalName = $sp.DisplayName
+                            DisplayName          = $sp.DisplayName
                             ApplicationId        = $sp.AppId
                             ObjectId             = $sp.Id
                             ObjectType           = 'ServicePrincipal'
@@ -195,7 +267,7 @@ function Get-ExpiringSpCredential {
                         $isSamlSigningCert = ($certType -eq 'AsymmetricX509Cert' -and $certUsage -eq 'Sign')
 
                         $credentialResult = [PSCustomObject]@{
-                            ServicePrincipalName = $sp.DisplayName
+                            DisplayName          = $sp.DisplayName
                             ApplicationId        = $sp.AppId
                             ObjectId             = $sp.Id
                             ObjectType           = 'ServicePrincipal'
@@ -220,11 +292,19 @@ function Get-ExpiringSpCredential {
                 }
             }
 
+            # Complete progress
+            Write-Progress -Id $progressId -Activity 'Processing Service Principals' -Completed
+
             if ($ExcludeMicrosoft) {
                 Write-Verbose -Message "Skipped $skippedMicrosoft Microsoft first-party service principal(s)"
+                Write-Verbose -Message "Skipped $skippedMicrosoftManaged Microsoft-managed service principal(s)"
+            }
+            if ($ExcludeManagedIdentity) {
+                Write-Verbose -Message "Skipped $skippedManagedIdentity Managed Identity service principal(s)"
             }
         }
         catch {
+            Write-Progress -Id $progressId -Activity 'Processing Service Principals' -Completed
             Write-Error -Message "Failed to query service principals: $PSItem"
             throw
         }

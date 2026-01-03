@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    EntraAppCredentials module loader.
+    EntraAppSso module loader.
 
 .DESCRIPTION
     Loads all public and private functions from the module directory.
@@ -25,29 +25,8 @@ foreach ($import in @($Public + $Private)) {
     }
 }
 
-# Module-scoped variables for caching
-$script:OwnerCache = New-Object -TypeName 'System.Collections.Generic.Dictionary[[String],[PSCustomObject]]'
-
-<#
-.SYNOPSIS
-    Clears the module's internal owner cache.
-
-.DESCRIPTION
-    Use this function to clear cached owner lookups if you need fresh data
-    without reimporting the module.
-#>
-function Clear-CredentialOwnerCache {
-    [CmdletBinding()]
-    param()
-
-    $script:OwnerCache.Clear()
-    Write-Verbose -Message 'Owner cache cleared.'
-}
-
 # Export public functions
 Export-ModuleMember -Function @(
-    'Get-ExpiringAppCredential'
-    'Get-ExpiringSpCredential'
-    'Export-EntraCredentialReport'
-    'Clear-CredentialOwnerCache'
+    'Get-SsoApplication'
+    'Export-EntraSsoReport'
 )

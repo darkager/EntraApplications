@@ -42,7 +42,7 @@ function Get-ExpiringAppCredential {
 
     .OUTPUTS
         PSCustomObject with properties:
-        - ApplicationName, ApplicationId, ObjectId, ObjectType
+        - DisplayName, ApplicationId, ObjectId, ObjectType
         - CredentialType, CredentialName, KeyId
         - StartDate, EndDate, DaysRemaining, Status
         - Owner, OwnerIds
@@ -64,7 +64,10 @@ function Get-ExpiringAppCredential {
         [Bool]$IncludeOwners = $true,
 
         [Parameter()]
-        [String[]]$ApplicationId
+        [String[]]$ApplicationId,
+
+        [Parameter(DontShow)]
+        [Int32]$ProgressParentId = -1
     )
 
     begin {
@@ -93,8 +96,24 @@ function Get-ExpiringAppCredential {
             Write-Verbose -Message "Found $appCount application(s) to process"
 
             $processedCount = 0
+            $progressId = if ($ProgressParentId -ge 0) { $ProgressParentId + 1 } else { 1 }
             foreach ($app in $applications) {
                 $processedCount++
+
+                # Show progress
+                $percentComplete = [Math]::Round(($processedCount / $appCount) * 100)
+                $progressParams = @{
+                    Id              = $progressId
+                    Activity        = 'Processing Applications'
+                    Status          = "Application $processedCount of $appCount"
+                    CurrentOperation = $app.DisplayName
+                    PercentComplete = $percentComplete
+                }
+                if ($ProgressParentId -ge 0) {
+                    $progressParams['ParentId'] = $ProgressParentId
+                }
+                Write-Progress @progressParams
+
                 Write-Verbose -Message "Processing application $processedCount of $appCount : $($app.DisplayName)"
 
                 # Get owner information once per application (not per credential)
@@ -130,7 +149,7 @@ function Get-ExpiringAppCredential {
 
                     if ($includeThis) {
                         $credentialResult = [PSCustomObject]@{
-                            ApplicationName    = $app.DisplayName
+                            DisplayName        = $app.DisplayName
                             ApplicationId      = $app.AppId
                             ObjectId           = $app.Id
                             ObjectType         = 'Application'
@@ -166,7 +185,7 @@ function Get-ExpiringAppCredential {
 
                     if ($includeThis) {
                         $credentialResult = [PSCustomObject]@{
-                            ApplicationName    = $app.DisplayName
+                            DisplayName        = $app.DisplayName
                             ApplicationId      = $app.AppId
                             ObjectId           = $app.Id
                             ObjectType         = 'Application'
@@ -189,8 +208,12 @@ function Get-ExpiringAppCredential {
                     }
                 }
             }
+
+            # Complete progress
+            Write-Progress -Id $progressId -Activity 'Processing Applications' -Completed
         }
         catch {
+            Write-Progress -Id $progressId -Activity 'Processing Applications' -Completed
             Write-Error -Message "Failed to query applications: $PSItem"
             throw
         }
