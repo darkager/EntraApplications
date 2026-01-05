@@ -255,6 +255,22 @@ Reference: [Microsoft Entra device management FAQ](https://learn.microsoft.com/e
 
 ### Changelog
 
+#### v0.4.0 (2026-01-05)
+
+- Regenerated module GUID for proper module identity
+
+#### v0.3.0 (2026-01-05)
+
+- Standardized output property to `DisplayName` (was ApplicationName/ServicePrincipalName)
+- Added progress bar display with parent-child support
+- Added `-ProgressParentId` parameter for nested progress scenarios
+
+#### v0.2.0 (2026-01-01)
+
+- Renamed `Export-CredentialReport` to `Export-EntraCredentialReport`
+- Changed `ExcludeMicrosoft` to Switch parameter
+- Improved `OutputPath` handling
+
 #### v0.1.1 (2026-01-01)
 
 - Reorganized module directory structure
@@ -338,7 +354,7 @@ Get-SsoApplication -ServicePrincipalId 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
 |-----------|------|---------|-------------|
 | SsoType | String | All | Filter by SSO type: All, SAML, OIDC, Password, None |
 | ServicePrincipalId | String[] | - | Specific service principal Object IDs to query |
-| ExcludeMicrosoft | Switch | - | Exclude Microsoft first-party applications |
+| ExcludeMicrosoft | Switch | - | Exclude Microsoft first-party and Microsoft-managed apps (including P2P Server) |
 | IncludeNone | Switch | - | Include apps with no SSO configured |
 
 #### Export-EntraSsoReport
@@ -378,7 +394,7 @@ Export-EntraSsoReport -IncludeNone
 |-----------|------|---------|-------------|
 | OutputPath | String | Auto-generated | Directory or CSV file path. Auto-generates timestamped filename if directory. |
 | SsoType | String | All | Filter by SSO type: All, SAML, OIDC, Password |
-| ExcludeMicrosoft | Switch | - | Exclude Microsoft first-party apps |
+| ExcludeMicrosoft | Switch | - | Exclude Microsoft first-party and Microsoft-managed apps (including P2P Server) |
 | IncludeNone | Switch | - | Include apps with no SSO configured |
 | PassThru | Switch | - | Return objects in addition to CSV export |
 
@@ -471,7 +487,29 @@ Get-SsoApplication -SsoType Password |
     Format-Table -Property DisplayName, ApplicationId, LoginUrl
 ```
 
+### Microsoft-Managed Application Detection
+
+The `-ExcludeMicrosoft` switch excludes both:
+1. **Microsoft first-party apps** - Apps owned by Microsoft's tenant (`f8cdef31-a31e-4b4a-93e4-5f571e91255a`)
+2. **Microsoft-managed apps** - Apps registered in your tenant but managed by Microsoft (e.g., P2P Server)
+
+This uses the same extensible detection framework as the EntraAppCredentials module. See [Microsoft-Managed Application Detection](#microsoft-managed-application-detection) in the EntraAppCredentials section for details.
+
 ### Changelog
+
+#### v0.3.0 (2026-01-05)
+
+- Regenerated module GUID for proper module identity
+
+#### v0.2.1 (2026-01-05)
+
+- Fixed `-ExcludeMicrosoft` to properly filter Microsoft-managed apps like P2P Server that are registered in customer tenant
+
+#### v0.2.0 (2026-01-05)
+
+- Added progress bar display with parent-child support
+- Added `-ProgressParentId` parameter for nested progress scenarios
+- Changed to explicit function exports in module loader
 
 #### v0.1.0 (2026-01-01)
 

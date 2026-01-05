@@ -3,13 +3,13 @@
     RootModule        = 'EntraAppCredentials.psm1'
 
     # Version number of this module
-    ModuleVersion     = '0.3.0'
+    ModuleVersion     = '0.4.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
 
     # ID used to uniquely identify this module
-    GUID              = '13166fde-cb50-4182-bd51-7823553a137b'
+    GUID              = 'faf870c4-4033-49e1-9d15-f7577570f22f'
 
     # Author of this module
     Author            = 'Your Name'
@@ -65,6 +65,7 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+v0.4.0 - Regenerated module GUID for proper module identity.
 v0.3.0 - Standardized output property to DisplayName (was ApplicationName/ServicePrincipalName). Added progress bar display with parent-child support. Added -ProgressParentId parameter for nested progress scenarios.
 v0.2.0 - Renamed Export-CredentialReport to Export-EntraCredentialReport. Changed ExcludeMicrosoft to Switch parameter. Improved OutputPath handling.
 '@

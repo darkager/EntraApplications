@@ -3,13 +3,13 @@
     RootModule        = 'EntraAppSso.psm1'
 
     # Version number of this module
-    ModuleVersion     = '0.2.1'
+    ModuleVersion     = '0.3.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
 
     # ID used to uniquely identify this module
-    GUID              = 'ca6f5405-4a65-4342-9dc8-2a62367236a7'
+    GUID              = '055a8029-1315-4d5a-8398-fcc8b3d4406e'
 
     # Author of this module
     Author            = 'Your Name'
@@ -63,6 +63,7 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+v0.3.0 - Regenerated module GUID for proper module identity.
 v0.2.1 - Fixed -ExcludeMicrosoft to properly filter Microsoft-managed apps like P2P Server that are registered in customer tenant.
 v0.2.0 - Added progress bar display with parent-child support. Added -ProgressParentId parameter for nested progress scenarios. Changed to explicit function exports.
 v0.1.0 - Initial release. Identify and report on SSO-configured applications (SAML, OIDC, Password).
