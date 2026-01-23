@@ -12,6 +12,7 @@ PowerShell modules for managing and reporting on Entra ID (Azure AD) application
 ## Table of Contents
 
 - [Common Requirements](#common-requirements)
+  - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Authentication](#authentication)
 - [EntraAppCredentials Module](#entraappcredentials-module)
@@ -38,11 +39,17 @@ PowerShell modules for managing and reporting on Entra ID (Azure AD) application
 
 ## Common Requirements
 
-All modules in this repository share these requirements:
+All modules in this repository share these requirements.
 
-- PowerShell 5.1 or later (Desktop or Core)
-- Microsoft.Graph.Applications module (v2.0.0 or later)
-- Microsoft Graph permissions: `Application.Read.All`
+### Prerequisites
+
+| Requirement | Details |
+|-------------|---------|
+| PowerShell | 5.1 or later (Desktop or Core) |
+| Microsoft.Graph.Applications | v2.0.0 or later |
+| **Microsoft Graph Permissions** | `Application.Read.All` |
+
+> **Note:** The `Application.Read.All` permission requires admin consent in most tenants. This permission allows read-only access to all application registrations and service principals.
 
 ### Installation
 
@@ -323,6 +330,13 @@ Reference: [Microsoft Entra device management FAQ](https://learn.microsoft.com/e
 
 ### Changelog
 
+#### v0.5.0 (2026-01-23)
+
+- Added `-Flatten` parameter for one row per object with aggregated credential stats
+- Added `-IgnoreExpiration` parameter to return all credentials regardless of expiration date
+- Changed `-IncludeExpired` (Bool) to `-ExcludeExpired` (Switch) for more idiomatic PowerShell
+- Renamed output file from `EntraCredentialReport_*.csv` to `EntraAppCredentialReport_*.csv`
+
 #### v0.4.0 (2026-01-05)
 
 - Regenerated module GUID for proper module identity
@@ -573,11 +587,12 @@ This uses the same extensible detection framework as the EntraAppCredentials mod
 
 ### Changelog
 
-#### v0.3.0 (2026-01-05)
+#### v0.4.0 (2026-01-23)
 
+- Renamed output file from `EntraSsoReport_*.csv` to `EntraAppSsoReport_*.csv`
 - Regenerated module GUID for proper module identity
 
-#### v0.2.1 (2026-01-05)
+#### v0.3.0 (2026-01-05)
 
 - Fixed `-ExcludeMicrosoft` to properly filter Microsoft-managed apps like P2P Server that are registered in customer tenant
 

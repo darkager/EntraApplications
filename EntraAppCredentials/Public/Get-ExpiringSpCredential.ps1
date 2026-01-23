@@ -13,9 +13,8 @@ function Get-ExpiringSpCredential {
         Credentials expiring within this many days will be included.
         Default is 30 days.
 
-    .PARAMETER IncludeExpired
-        Include credentials that have already expired.
-        Default is $true.
+    .PARAMETER ExcludeExpired
+        Exclude credentials that have already expired (Status = 'Expired').
 
     .PARAMETER IncludeOwners
         Include owner information for each service principal.
@@ -40,7 +39,7 @@ function Get-ExpiringSpCredential {
         Gets all service principals with credentials expiring in the next 30 days or already expired.
 
     .EXAMPLE
-        Get-ExpiringSpCredential -DaysUntilExpiration 90 -IncludeExpired $false
+        Get-ExpiringSpCredential -DaysUntilExpiration 90 -ExcludeExpired
 
         Gets service principals with credentials expiring in the next 90 days, excluding already expired.
 
@@ -74,7 +73,7 @@ function Get-ExpiringSpCredential {
         [Int32]$DaysUntilExpiration = 30,
 
         [Parameter()]
-        [Bool]$IncludeExpired = $true,
+        [Switch]$ExcludeExpired,
 
         [Parameter()]
         [Bool]$IncludeOwners = $true,
@@ -214,10 +213,10 @@ function Get-ExpiringSpCredential {
 
                     # Filter based on parameters
                     $includeThis = $false
-                    if ($credStatus.Status -eq 'Expired' -and $IncludeExpired) {
-                        $includeThis = $true
+                    if ($credStatus.Status -eq 'Expired') {
+                        $includeThis = -not $ExcludeExpired
                     }
-                    elseif ($credStatus.Status -ne 'Expired' -and $credStatus.DaysRemaining -le $DaysUntilExpiration) {
+                    elseif ($credStatus.DaysRemaining -le $DaysUntilExpiration) {
                         $includeThis = $true
                     }
 
@@ -253,10 +252,10 @@ function Get-ExpiringSpCredential {
 
                     # Filter based on parameters
                     $includeThis = $false
-                    if ($credStatus.Status -eq 'Expired' -and $IncludeExpired) {
-                        $includeThis = $true
+                    if ($credStatus.Status -eq 'Expired') {
+                        $includeThis = -not $ExcludeExpired
                     }
-                    elseif ($credStatus.Status -ne 'Expired' -and $credStatus.DaysRemaining -le $DaysUntilExpiration) {
+                    elseif ($credStatus.DaysRemaining -le $DaysUntilExpiration) {
                         $includeThis = $true
                     }
 

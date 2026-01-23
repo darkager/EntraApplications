@@ -10,7 +10,7 @@ function Export-EntraSsoReport {
     .PARAMETER OutputPath
         Base path for the CSV output. The function appends '_<timestamp>.csv' if a
         directory is specified, or uses the exact path if a .csv file is specified.
-        If not specified, outputs to EntraSsoReport_<timestamp>.csv in the current directory.
+        If not specified, outputs to EntraAppSsoReport_<timestamp>.csv in the current directory.
 
     .PARAMETER SsoType
         Filter results by SSO type. Valid values: All, SAML, OIDC, Password.
@@ -33,7 +33,7 @@ function Export-EntraSsoReport {
     .EXAMPLE
         Export-EntraSsoReport -OutputPath 'C:\Reports'
 
-        Exports to C:\Reports\EntraSsoReport_<timestamp>.csv
+        Exports to C:\Reports\EntraAppSsoReport_<timestamp>.csv
 
     .EXAMPLE
         Export-EntraSsoReport -OutputPath 'C:\Reports\SsoReport.csv' -SsoType SAML
@@ -84,11 +84,11 @@ function Export-EntraSsoReport {
         # Generate output path
         $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
         if (-not $OutputPath) {
-            $OutputPath = Join-Path -Path (Get-Location) -ChildPath "EntraSsoReport_$timestamp.csv"
+            $OutputPath = Join-Path -Path (Get-Location) -ChildPath "EntraAppSsoReport_$timestamp.csv"
         }
         elseif (Test-Path -Path $OutputPath -PathType Container) {
             # OutputPath is a directory - append filename
-            $OutputPath = Join-Path -Path $OutputPath -ChildPath "EntraSsoReport_$timestamp.csv"
+            $OutputPath = Join-Path -Path $OutputPath -ChildPath "EntraAppSsoReport_$timestamp.csv"
         }
         elseif (-not $OutputPath.EndsWith('.csv', [StringComparison]::OrdinalIgnoreCase)) {
             # OutputPath is a base name - append timestamp and extension

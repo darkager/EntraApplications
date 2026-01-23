@@ -3,7 +3,7 @@
     RootModule        = 'EntraAppSso.psm1'
 
     # Version number of this module
-    ModuleVersion     = '0.3.0'
+    ModuleVersion     = '0.4.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -63,8 +63,8 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-v0.3.0 - Regenerated module GUID for proper module identity.
-v0.2.1 - Fixed -ExcludeMicrosoft to properly filter Microsoft-managed apps like P2P Server that are registered in customer tenant.
+v0.4.0 - Renamed output file to EntraAppSsoReport_*.csv. Regenerated module GUID for proper module identity.
+v0.3.0 - Fixed -ExcludeMicrosoft to properly filter Microsoft-managed apps like P2P Server that are registered in customer tenant.
 v0.2.0 - Added progress bar display with parent-child support. Added -ProgressParentId parameter for nested progress scenarios. Changed to explicit function exports.
 v0.1.0 - Initial release. Identify and report on SSO-configured applications (SAML, OIDC, Password).
 '@

@@ -11,15 +11,18 @@ function Export-EntraCredentialReport {
     .PARAMETER OutputPath
         Base path for the CSV output. The function appends '_<timestamp>.csv' if a
         directory is specified, or uses the exact path if a .csv file is specified.
-        If not specified, outputs to EntraCredentialReport_<timestamp>.csv in the current directory.
+        If not specified, outputs to EntraAppCredentialReport_<timestamp>.csv in the current directory.
 
     .PARAMETER DaysUntilExpiration
         The number of days to look ahead for expiring credentials.
-        Default is 30 days.
+        Default is 30 days. Ignored if -IgnoreExpiration is specified.
 
-    .PARAMETER IncludeExpired
-        Include credentials that have already expired.
-        Default is $true.
+    .PARAMETER IgnoreExpiration
+        Return all credentials regardless of expiration date. Bypasses the
+        DaysUntilExpiration filter entirely.
+
+    .PARAMETER ExcludeExpired
+        Exclude credentials that have already expired (Status = 'Expired').
 
     .PARAMETER IncludeApplications
         Include application (App Registration) credentials.
@@ -41,6 +44,11 @@ function Export-EntraCredentialReport {
     .PARAMETER ExcludeOwners
         Exclude owner information from the report. Use for faster execution.
 
+    .PARAMETER Flatten
+        Consolidate output to one row per application/service principal instead of one row
+        per credential. Aggregates credential counts, earliest expiration, and status summary.
+        Useful for getting a quick overview of which objects need attention.
+
     .PARAMETER PassThru
         Return the credential objects in addition to exporting to CSV.
 
@@ -52,7 +60,7 @@ function Export-EntraCredentialReport {
     .EXAMPLE
         Export-EntraCredentialReport -OutputPath 'C:\Reports'
 
-        Exports to C:\Reports\EntraCredentialReport_<timestamp>.csv
+        Exports to C:\Reports\EntraAppCredentialReport_<timestamp>.csv
 
     .EXAMPLE
         Export-EntraCredentialReport -OutputPath 'C:\Reports\credentials.csv' -DaysUntilExpiration 90
@@ -69,6 +77,21 @@ function Export-EntraCredentialReport {
         $report | Where-Object -FilterScript { $PSItem.Status -eq 'Expired' }
 
         Gets the report and filters for expired credentials.
+
+    .EXAMPLE
+        Export-EntraCredentialReport -Flatten
+
+        Exports one row per application/service principal with aggregated credential information.
+
+    .EXAMPLE
+        Export-EntraCredentialReport -IgnoreExpiration
+
+        Exports all credentials regardless of when they expire.
+
+    .EXAMPLE
+        Export-EntraCredentialReport -IgnoreExpiration -ExcludeExpired
+
+        Exports all credentials that haven't expired yet, regardless of expiration date.
 
     .OUTPUTS
         If -PassThru is specified, returns PSCustomObject collection.
@@ -88,7 +111,10 @@ function Export-EntraCredentialReport {
         [Int32]$DaysUntilExpiration = 30,
 
         [Parameter()]
-        [Bool]$IncludeExpired = $true,
+        [Switch]$IgnoreExpiration,
+
+        [Parameter()]
+        [Switch]$ExcludeExpired,
 
         [Parameter()]
         [Bool]$IncludeApplications = $true,
@@ -106,6 +132,9 @@ function Export-EntraCredentialReport {
         [Switch]$ExcludeOwners,
 
         [Parameter()]
+        [Switch]$Flatten,
+
+        [Parameter()]
         [Switch]$PassThru
     )
 
@@ -115,11 +144,11 @@ function Export-EntraCredentialReport {
         # Generate output path
         $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
         if (-not $OutputPath) {
-            $OutputPath = Join-Path -Path (Get-Location) -ChildPath "EntraCredentialReport_$timestamp.csv"
+            $OutputPath = Join-Path -Path (Get-Location) -ChildPath "EntraAppCredentialReport_$timestamp.csv"
         }
         elseif (Test-Path -Path $OutputPath -PathType Container) {
             # OutputPath is a directory - append filename
-            $OutputPath = Join-Path -Path $OutputPath -ChildPath "EntraCredentialReport_$timestamp.csv"
+            $OutputPath = Join-Path -Path $OutputPath -ChildPath "EntraAppCredentialReport_$timestamp.csv"
         }
         elseif (-not $OutputPath.EndsWith('.csv', [StringComparison]::OrdinalIgnoreCase)) {
             # OutputPath is a base name - append timestamp and extension
@@ -139,6 +168,9 @@ function Export-EntraCredentialReport {
         # Determine IncludeOwners value (inverse of ExcludeOwners)
         $includeOwners = -not $ExcludeOwners
 
+        # Handle -IgnoreExpiration: use maximum days (10 years) to get all credentials
+        $effectiveDays = if ($IgnoreExpiration) { 3650 } else { $DaysUntilExpiration }
+
         # Progress tracking
         $parentProgressId = 0
         $totalSteps = ([Int32]$IncludeApplications) + ([Int32]$IncludeServicePrincipals)
@@ -157,8 +189,8 @@ function Export-EntraCredentialReport {
 
                 Write-Verbose -Message 'Querying application credentials...'
                 $appCredentials = Get-ExpiringAppCredential `
-                    -DaysUntilExpiration $DaysUntilExpiration `
-                    -IncludeExpired $IncludeExpired `
+                    -DaysUntilExpiration $effectiveDays `
+                    -ExcludeExpired:$ExcludeExpired `
                     -IncludeOwners $includeOwners `
                     -ProgressParentId $parentProgressId
 
@@ -200,8 +232,8 @@ function Export-EntraCredentialReport {
 
                 Write-Verbose -Message 'Querying service principal credentials...'
                 $spCredentials = Get-ExpiringSpCredential `
-                    -DaysUntilExpiration $DaysUntilExpiration `
-                    -IncludeExpired $IncludeExpired `
+                    -DaysUntilExpiration $effectiveDays `
+                    -ExcludeExpired:$ExcludeExpired `
                     -IncludeOwners $includeOwners `
                     -ExcludeMicrosoft:$ExcludeMicrosoft `
                     -ExcludeManagedIdentity:$ExcludeManagedIdentity `
@@ -238,23 +270,109 @@ function Export-EntraCredentialReport {
             # Complete parent progress
             Write-Progress -Id $parentProgressId -Activity 'Exporting Credential Report' -Completed
 
-            # Sort by days remaining (expired first, then soonest to expire)
-            $sortedCredentials = $allCredentials | Sort-Object -Property @{
-                Expression = {
-                    if ($null -eq $PSItem.DaysRemaining) { [Int32]::MaxValue }
-                    else { $PSItem.DaysRemaining }
+            # Apply flattening if requested
+            if ($Flatten) {
+                Write-Verbose -Message 'Flattening credentials to one row per object'
+                $flattenedResults = New-Object -TypeName 'System.Collections.Generic.List[PSCustomObject]'
+
+                # Group by ObjectId (unique per application/service principal)
+                $groupedByObject = $allCredentials | Group-Object -Property ObjectId
+
+                foreach ($group in $groupedByObject) {
+                    $creds = $group.Group
+                    $firstCred = $creds | Select-Object -First 1
+
+                    # Count credentials by type
+                    $secretCount = @($creds | Where-Object -FilterScript { $PSItem.CredentialType -eq 'Secret' }).Count
+                    $certCount = @($creds | Where-Object -FilterScript { $PSItem.CredentialType -eq 'Certificate' }).Count
+                    $samlCertCount = @($creds | Where-Object -FilterScript { $PSItem.CredentialType -eq 'SAMLSigningCertificate' }).Count
+
+                    # Find earliest expiration
+                    $earliestCred = $creds | Where-Object -FilterScript { $null -ne $PSItem.EndDate } |
+                        Sort-Object -Property EndDate | Select-Object -First 1
+                    $earliestExpiration = if ($earliestCred) { $earliestCred.EndDate } else { $null }
+                    $earliestDaysRemaining = if ($earliestCred) { $earliestCred.DaysRemaining } else { $null }
+
+                    # Determine worst status (priority: Expired > ExpiringToday > ExpiringSoon > ExpiringMedium > Valid)
+                    $statusPriority = @{
+                        'Expired'        = 1
+                        'ExpiringToday'  = 2
+                        'ExpiringSoon'   = 3
+                        'ExpiringMedium' = 4
+                        'Valid'          = 5
+                        'NoExpiration'   = 6
+                    }
+                    $worstStatus = ($creds | Sort-Object -Property @{
+                        Expression = { $statusPriority[$PSItem.Status] ?? 99 }
+                    } | Select-Object -First 1).Status
+
+                    # Count by status
+                    $expiredCount = @($creds | Where-Object -FilterScript { $PSItem.Status -eq 'Expired' }).Count
+                    $expiringSoonCount = @($creds | Where-Object -FilterScript { $PSItem.Status -in @('ExpiringToday', 'ExpiringSoon') }).Count
+
+                    $flattenedRow = [PSCustomObject]@{
+                        DisplayName          = $firstCred.DisplayName
+                        ApplicationId        = $firstCred.ApplicationId
+                        ObjectId             = $firstCred.ObjectId
+                        ObjectType           = $firstCred.ObjectType
+                        ServicePrincipalType = $firstCred.ServicePrincipalType
+                        TotalCredentials     = $creds.Count
+                        SecretCount          = $secretCount
+                        CertificateCount     = $certCount
+                        SamlCertCount        = $samlCertCount
+                        ExpiredCount         = $expiredCount
+                        ExpiringSoonCount    = $expiringSoonCount
+                        EarliestExpiration   = $earliestExpiration
+                        DaysToEarliest       = $earliestDaysRemaining
+                        WorstStatus          = $worstStatus
+                        Owner                = $firstCred.Owner
+                        OwnerUpns            = $firstCred.OwnerUpns
+                        OwnerIds             = $firstCred.OwnerIds
+                    }
+                    $flattenedResults.Add($flattenedRow)
+                }
+
+                # Sort flattened results by days to earliest expiration
+                $sortedCredentials = $flattenedResults | Sort-Object -Property @{
+                    Expression = {
+                        if ($null -eq $PSItem.DaysToEarliest) { [Int32]::MaxValue }
+                        else { $PSItem.DaysToEarliest }
+                    }
+                }
+
+                Write-Verbose -Message "Flattened $($allCredentials.Count) credentials into $($flattenedResults.Count) rows"
+            }
+            else {
+                # Sort by days remaining (expired first, then soonest to expire)
+                $sortedCredentials = $allCredentials | Sort-Object -Property @{
+                    Expression = {
+                        if ($null -eq $PSItem.DaysRemaining) { [Int32]::MaxValue }
+                        else { $PSItem.DaysRemaining }
+                    }
                 }
             }
 
             # Export to CSV
-            Write-Verbose -Message "Exporting $($allCredentials.Count) credential(s) to $OutputPath"
+            $rowCount = @($sortedCredentials).Count
+            Write-Verbose -Message "Exporting $rowCount row(s) to $OutputPath"
             $sortedCredentials | Export-Csv -Path $OutputPath -NoTypeInformation -Encoding UTF8
 
             Write-Host "Report exported to: $OutputPath" -ForegroundColor Green
-            Write-Host "Total credentials found: $($allCredentials.Count)" -ForegroundColor Cyan
 
-            # Summary by status
-            $statusSummary = $sortedCredentials | Group-Object -Property Status
+            if ($Flatten) {
+                Write-Host "Total objects with expiring credentials: $rowCount" -ForegroundColor Cyan
+                Write-Host "Total credentials found: $($allCredentials.Count)" -ForegroundColor Cyan
+
+                # Summary by worst status
+                $statusSummary = $sortedCredentials | Group-Object -Property WorstStatus
+            }
+            else {
+                Write-Host "Total credentials found: $($allCredentials.Count)" -ForegroundColor Cyan
+
+                # Summary by status
+                $statusSummary = $sortedCredentials | Group-Object -Property Status
+            }
+
             foreach ($group in $statusSummary) {
                 $color = switch ($group.Name) {
                     'Expired' { 'Red' }

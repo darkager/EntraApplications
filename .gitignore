@@ -13,6 +13,7 @@ TestResults/
 # IDE and Editor Files
 .vscode/
 .idea/
+.claude/
 *.suo
 *.user
 *.sln.docstates

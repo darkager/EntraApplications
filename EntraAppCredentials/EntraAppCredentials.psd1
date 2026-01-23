@@ -3,7 +3,7 @@
     RootModule        = 'EntraAppCredentials.psm1'
 
     # Version number of this module
-    ModuleVersion     = '0.4.0'
+    ModuleVersion     = '0.5.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -65,6 +65,7 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+v0.5.0 - Added -Flatten parameter for aggregated output. Added -IgnoreExpiration parameter. Changed -IncludeExpired to -ExcludeExpired switch. Renamed output file to EntraAppCredentialReport_*.csv.
 v0.4.0 - Regenerated module GUID for proper module identity.
 v0.3.0 - Standardized output property to DisplayName (was ApplicationName/ServicePrincipalName). Added progress bar display with parent-child support. Added -ProgressParentId parameter for nested progress scenarios.
 v0.2.0 - Renamed Export-CredentialReport to Export-EntraCredentialReport. Changed ExcludeMicrosoft to Switch parameter. Improved OutputPath handling.
