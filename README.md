@@ -9,6 +9,33 @@ PowerShell modules for managing and reporting on Entra ID (Azure AD) application
 | [EntraAppCredentials](#entraappcredentials-module) | Query and report on expiring credentials (secrets and certificates) |
 | [EntraAppSso](#entraappsso-module) | Identify and report on SSO-configured applications (SAML, OIDC, Password) |
 
+## Table of Contents
+
+- [Common Requirements](#common-requirements)
+  - [Installation](#installation)
+  - [Authentication](#authentication)
+- [EntraAppCredentials Module](#entraappcredentials-module)
+  - [Overview](#overview)
+  - [Quick Start](#quick-start)
+  - [Additional Functions](#additional-functions)
+  - [Output Properties](#output-properties)
+  - [Status Values](#status-values)
+  - [Examples](#examples)
+  - [Microsoft-Managed Application Detection](#microsoft-managed-application-detection)
+  - [Performance Notes](#performance-notes)
+  - [Changelog](#changelog)
+- [EntraAppSso Module](#entraappsso-module)
+  - [Overview](#overview-1)
+  - [Quick Start](#quick-start-1)
+  - [SSO Type Detection](#sso-type-detection)
+  - [Additional Functions](#additional-functions-1)
+  - [Output Properties](#output-properties-1)
+  - [SSO Type Values](#sso-type-values)
+  - [Examples](#examples-1)
+  - [Microsoft-Managed Application Detection](#microsoft-managed-application-detection-1)
+  - [Changelog](#changelog-1)
+- [License](#license)
+
 ## Common Requirements
 
 All modules in this repository share these requirements:
@@ -55,7 +82,61 @@ This module helps administrators identify and track credentials that are expirin
 - **Applications** (App Registrations) - Client secrets and certificates
 - **Service Principals** (Enterprise Applications) - Client secrets, certificates, and SAML signing certificates
 
-### Functions
+### Quick Start
+
+#### Connect to Microsoft Graph
+
+```powershell
+Connect-MgGraph -Scopes 'Application.Read.All'
+```
+
+#### Export-EntraCredentialReport
+
+Exports a combined credential report from both applications and service principals to CSV. This is the primary function for generating reports.
+
+```powershell
+# Export all expiring credentials to a timestamped CSV in current directory
+Export-EntraCredentialReport
+
+# Export to a directory (auto-generates filename)
+Export-EntraCredentialReport -OutputPath 'C:\Reports'
+
+# Export to a specific file with 90-day threshold
+Export-EntraCredentialReport -OutputPath 'C:\Reports\credentials.csv' -DaysUntilExpiration 90
+
+# Exclude Microsoft apps and Managed Identities
+Export-EntraCredentialReport -ExcludeMicrosoft -ExcludeManagedIdentity -PassThru
+
+# Export only applications (no service principals)
+Export-EntraCredentialReport -IncludeServicePrincipals $false
+
+# Flatten to one row per application/service principal
+Export-EntraCredentialReport -Flatten
+
+# Get all credentials regardless of expiration date
+Export-EntraCredentialReport -IgnoreExpiration
+
+# Get all non-expired credentials
+Export-EntraCredentialReport -IgnoreExpiration -ExcludeExpired
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| OutputPath | String | Auto-generated | Directory or CSV file path. Auto-generates timestamped filename if directory. |
+| DaysUntilExpiration | Int32 | 30 | Days to look ahead (ignored if -IgnoreExpiration) |
+| IgnoreExpiration | Switch | - | Return all credentials regardless of expiration date |
+| ExcludeExpired | Switch | - | Exclude already expired credentials |
+| IncludeApplications | Bool | $true | Include app registrations |
+| IncludeServicePrincipals | Bool | $true | Include enterprise apps |
+| ExcludeMicrosoft | Switch | - | Exclude Microsoft first-party and Microsoft-managed apps (including P2P Server) |
+| ExcludeManagedIdentity | Switch | - | Exclude Managed Identity service principals (auto-rotated) |
+| ExcludeOwners | Switch | - | Exclude owner information (faster execution) |
+| Flatten | Switch | - | One row per object instead of one row per credential |
+| PassThru | Switch | - | Return objects in addition to CSV export |
+
+### Additional Functions
 
 #### Get-ExpiringAppCredential
 
@@ -66,7 +147,7 @@ Queries Entra ID for application registrations with expiring or expired credenti
 Get-ExpiringAppCredential
 
 # Get credentials expiring in the next 90 days, excluding already expired
-Get-ExpiringAppCredential -DaysUntilExpiration 90 -IncludeExpired $false
+Get-ExpiringAppCredential -DaysUntilExpiration 90 -ExcludeExpired
 
 # Query a specific application
 Get-ExpiringAppCredential -ApplicationId 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
@@ -80,7 +161,7 @@ Get-ExpiringAppCredential -IncludeOwners $false
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | DaysUntilExpiration | Int32 | 30 | Days to look ahead for expiring credentials |
-| IncludeExpired | Bool | $true | Include already expired credentials |
+| ExcludeExpired | Switch | - | Exclude already expired credentials |
 | IncludeOwners | Bool | $true | Include owner information |
 | ApplicationId | String[] | - | Specific application Object IDs to query |
 
@@ -104,46 +185,11 @@ Get-ExpiringSpCredential -ServicePrincipalId 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxx
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | DaysUntilExpiration | Int32 | 30 | Days to look ahead for expiring credentials |
-| IncludeExpired | Bool | $true | Include already expired credentials |
+| ExcludeExpired | Switch | - | Exclude already expired credentials |
 | IncludeOwners | Bool | $true | Include owner information |
 | ServicePrincipalId | String[] | - | Specific service principal Object IDs to query |
 | ExcludeMicrosoft | Switch | - | Exclude Microsoft first-party and Microsoft-managed apps (including P2P Server) |
 | ExcludeManagedIdentity | Switch | - | Exclude Managed Identity service principals (auto-rotated) |
-
-#### Export-EntraCredentialReport
-
-Exports a combined credential report from both applications and service principals to CSV.
-
-```powershell
-# Export all expiring credentials to a timestamped CSV in current directory
-Export-EntraCredentialReport
-
-# Export to a directory (auto-generates filename)
-Export-EntraCredentialReport -OutputPath 'C:\Reports'
-
-# Export to a specific file with 90-day threshold
-Export-EntraCredentialReport -OutputPath 'C:\Reports\credentials.csv' -DaysUntilExpiration 90
-
-# Exclude Microsoft apps and Managed Identities
-Export-EntraCredentialReport -ExcludeMicrosoft -ExcludeManagedIdentity -PassThru
-
-# Export only applications (no service principals)
-Export-EntraCredentialReport -IncludeServicePrincipals $false
-```
-
-**Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| OutputPath | String | Auto-generated | Directory or CSV file path. Auto-generates timestamped filename if directory. |
-| DaysUntilExpiration | Int32 | 30 | Days to look ahead |
-| IncludeExpired | Bool | $true | Include expired credentials |
-| IncludeApplications | Bool | $true | Include app registrations |
-| IncludeServicePrincipals | Bool | $true | Include enterprise apps |
-| ExcludeMicrosoft | Switch | - | Exclude Microsoft first-party and Microsoft-managed apps (including P2P Server) |
-| ExcludeManagedIdentity | Switch | - | Exclude Managed Identity service principals (auto-rotated) |
-| ExcludeOwners | Switch | - | Exclude owner information (faster execution) |
-| PassThru | Switch | - | Return objects in addition to CSV export |
 
 #### Clear-CredentialOwnerCache
 
@@ -175,6 +221,28 @@ Clear-CredentialOwnerCache
 | Status | Expired, ExpiringToday, ExpiringSoon, ExpiringMedium, Valid |
 | CertificateType | Certificate type - certificates only |
 | CertificateUsage | Certificate usage - certificates only |
+| Owner | Owner display names (semicolon-separated) |
+| OwnerUpns | Owner UPNs (semicolon-separated) |
+| OwnerIds | Owner Object IDs (semicolon-separated) |
+
+#### Flattened Output Properties (with -Flatten)
+
+| Property | Description |
+|----------|-------------|
+| DisplayName | Display name of the application or service principal |
+| ApplicationId | Application (client) ID |
+| ObjectId | Object ID of the application or service principal |
+| ObjectType | "Application" or "ServicePrincipal" |
+| ServicePrincipalType | Type (Application, ManagedIdentity, etc.) - service principals only |
+| TotalCredentials | Total number of credentials on this object |
+| SecretCount | Number of client secrets |
+| CertificateCount | Number of certificates |
+| SamlCertCount | Number of SAML signing certificates |
+| ExpiredCount | Number of already expired credentials |
+| ExpiringSoonCount | Number of credentials expiring today or soon |
+| EarliestExpiration | Earliest credential expiration date |
+| DaysToEarliest | Days until earliest expiration |
+| WorstStatus | Most urgent status across all credentials |
 | Owner | Owner display names (semicolon-separated) |
 | OwnerUpns | Owner UPNs (semicolon-separated) |
 | OwnerIds | Owner Object IDs (semicolon-separated) |
@@ -303,63 +371,17 @@ This module helps administrators discover which service principals have SSO conf
 | **OIDC** | OpenID Connect | Token-based federation using OAuth 2.0 / JWT |
 | **Password** | Form-fill | Credential vaulting - Entra ID stores and replays user credentials |
 
-### SSO Type Detection
+### Quick Start
 
-The `preferredSingleSignOnMode` property on service principals explicitly identifies the SSO type. However, this property can be `null` for:
-- Older SAML applications (pre-dating this property)
-- OIDC applications where it wasn't explicitly set
-
-The module uses a priority-based detection approach to handle these cases:
-
-| Priority | Source | Method |
-|----------|--------|--------|
-| 1 | `PreferredMode` | Uses `preferredSingleSignOnMode` property when set (definitive) |
-| 2 | `SigningCertificate` | Detects SAML by presence of signing certificates (`type=AsymmetricX509Cert`, `usage=Sign`) |
-| 3 | `SamlIndicators` | Detects SAML settings or notification email addresses |
-
-The `SsoTypeSource` output property indicates which detection method was used.
-
-### Functions
-
-#### Get-SsoApplication
-
-Queries service principals and identifies their SSO configuration type.
+#### Connect to Microsoft Graph
 
 ```powershell
-# Get all SSO-configured applications (SAML, OIDC, or Password)
-Get-SsoApplication
-
-# Get only SAML applications
-Get-SsoApplication -SsoType SAML
-
-# Get only OIDC applications
-Get-SsoApplication -SsoType OIDC
-
-# Get only Password SSO applications
-Get-SsoApplication -SsoType Password
-
-# Exclude Microsoft first-party applications
-Get-SsoApplication -ExcludeMicrosoft
-
-# Include apps with no SSO configured
-Get-SsoApplication -IncludeNone
-
-# Query specific service principals
-Get-SsoApplication -ServicePrincipalId 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+Connect-MgGraph -Scopes 'Application.Read.All'
 ```
-
-**Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| SsoType | String | All | Filter by SSO type: All, SAML, OIDC, Password, None |
-| ServicePrincipalId | String[] | - | Specific service principal Object IDs to query |
-| ExcludeMicrosoft | Switch | - | Exclude Microsoft first-party and Microsoft-managed apps (including P2P Server) |
-| IncludeNone | Switch | - | Include apps with no SSO configured |
 
 #### Export-EntraSsoReport
 
-Exports an SSO configuration report to CSV with summary statistics.
+Exports an SSO configuration report to CSV with summary statistics. This is the primary function for generating reports.
 
 ```powershell
 # Export all SSO applications to a timestamped CSV
@@ -397,6 +419,60 @@ Export-EntraSsoReport -IncludeNone
 | ExcludeMicrosoft | Switch | - | Exclude Microsoft first-party and Microsoft-managed apps (including P2P Server) |
 | IncludeNone | Switch | - | Include apps with no SSO configured |
 | PassThru | Switch | - | Return objects in addition to CSV export |
+
+### SSO Type Detection
+
+The `preferredSingleSignOnMode` property on service principals explicitly identifies the SSO type. However, this property can be `null` for:
+- Older SAML applications (pre-dating this property)
+- OIDC applications where it wasn't explicitly set
+
+The module uses a priority-based detection approach to handle these cases:
+
+| Priority | Source | Method |
+|----------|--------|--------|
+| 1 | `PreferredMode` | Uses `preferredSingleSignOnMode` property when set (definitive) |
+| 2 | `SigningCertificate` | Detects SAML by presence of signing certificates (`type=AsymmetricX509Cert`, `usage=Sign`) |
+| 3 | `SamlIndicators` | Detects SAML settings or notification email addresses |
+
+The `SsoTypeSource` output property indicates which detection method was used.
+
+### Additional Functions
+
+#### Get-SsoApplication
+
+Queries service principals and identifies their SSO configuration type.
+
+```powershell
+# Get all SSO-configured applications (SAML, OIDC, or Password)
+Get-SsoApplication
+
+# Get only SAML applications
+Get-SsoApplication -SsoType SAML
+
+# Get only OIDC applications
+Get-SsoApplication -SsoType OIDC
+
+# Get only Password SSO applications
+Get-SsoApplication -SsoType Password
+
+# Exclude Microsoft first-party applications
+Get-SsoApplication -ExcludeMicrosoft
+
+# Include apps with no SSO configured
+Get-SsoApplication -IncludeNone
+
+# Query specific service principals
+Get-SsoApplication -ServicePrincipalId 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| SsoType | String | All | Filter by SSO type: All, SAML, OIDC, Password, None |
+| ServicePrincipalId | String[] | - | Specific service principal Object IDs to query |
+| ExcludeMicrosoft | Switch | - | Exclude Microsoft first-party and Microsoft-managed apps (including P2P Server) |
+| IncludeNone | Switch | - | Include apps with no SSO configured |
 
 ### Output Properties
 
