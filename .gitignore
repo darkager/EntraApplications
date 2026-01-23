@@ -32,6 +32,7 @@ Desktop.ini
 CredentialReport_*.csv
 _data/
 _distill/
+research/
 
 # Sensitive Files
 *.pfx
