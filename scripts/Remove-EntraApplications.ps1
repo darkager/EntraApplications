@@ -68,8 +68,11 @@ if (-not $TranscriptPath) {
     $TranscriptPath = Join-Path -Path (Get-Location) -ChildPath "Remove-EntraApplications_$timestamp.log"
 }
 
-# Start transcript
+# Start transcript (bypass WhatIf — logging is observational, not destructive)
+$savedWhatIf = $WhatIfPreference
+$WhatIfPreference = $false
 Start-Transcript -Path $TranscriptPath -Append
+$WhatIfPreference = $savedWhatIf
 Write-Verbose -Message "Transcript logging to: $TranscriptPath"
 
 try {
@@ -97,8 +100,8 @@ try {
         return
     }
 
-    # Confirmation gate
-    if (-not $Force -and -not $PSCmdlet.ShouldProcess(
+    # Confirmation gate (skip when -WhatIf so per-item WhatIf output is shown)
+    if (-not $WhatIfPreference -and -not $Force -and -not $PSCmdlet.ShouldProcess(
         "$totalCount application registration(s)",
         'Delete'
     )) {
@@ -162,5 +165,8 @@ catch {
     throw
 }
 finally {
+    $savedWhatIf = $WhatIfPreference
+    $WhatIfPreference = $false
     Stop-Transcript
+    $WhatIfPreference = $savedWhatIf
 }
